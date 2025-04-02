@@ -41,7 +41,8 @@ void addToBuf(const char* str) {
 
 %}
 
-%x SINGLE_COMMENT
+%x  SINGLE_COMMENT
+%x  PRINT_STATE
 
 digs    [0-9]
 word    [a-zA-Z_][a-zA-Z0-9_]*
@@ -68,7 +69,6 @@ spaces  [ \t\r\f\v]
 }
 
 \n  {
-    printf("here's new line\n");
     linenum++;
     buf[bufIndex] = '\0';  // terminate current line
     printf("%d: %s\n", linenum, buf);
@@ -80,6 +80,11 @@ spaces  [ \t\r\f\v]
     BEGIN(SINGLE_COMMENT); 
 }
 
+\"  {
+    addToBuf(yytext);
+    BEGIN(PRINT_STATE);
+}
+
 {symbol}    {
     printf("<'%s'>\n", yytext);
     addToBuf(yytext);
@@ -89,7 +94,6 @@ spaces  [ \t\r\f\v]
     buf[bufIndex] = '\0';
     printf("%d: %s\n", linenum, buf);
     bufIndex = 0;
-    linenum++;
     BEGIN(INITIAL);
 }
 
@@ -97,9 +101,21 @@ spaces  [ \t\r\f\v]
     addToBuf(yytext);
 }
 
+<PRINT_STATE>[^\n]+\" {
+    printf("<string:%s>\n", yytext);
+    addToBuf(yytext);
+    BEGIN(INITIAL);
+}
+
 %%
 
 int main(void) {
     yylex();
+
+    if (strlen(buf) > 0) {
+        buf[bufIndex] = '\0';  // terminate current line
+        printf("%d: %s\n", linenum+1, buf);
+    }
+
     return 0;
 }
