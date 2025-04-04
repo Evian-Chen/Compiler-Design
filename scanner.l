@@ -43,6 +43,7 @@ void addToBuf(const char* str) {
 
 %x  SINGLE_COMMENT
 %x  PRINT_STATE
+%x  MUTI_COMMENT
 
 digs    [0-9]
 word    [a-zA-Z_][a-zA-Z0-9_]*
@@ -51,11 +52,23 @@ spaces  [ \t\r\f\v]
 
 %%
 
-{digs}  {
-    printf("i found integer");
+\/\/    { 
+    addToBuf(yytext);
+    BEGIN(SINGLE_COMMENT); 
 }
 
-{word} {
+\/\* {
+    printf("begin muti comment\n");
+    addToBuf(yytext);
+    BEGIN(MUTI_COMMENT);
+}
+
+{digs}  {
+    printf("i found integer");
+    addToBuf(yytext);
+}
+
+{word}{spaces} {
     if (isKeyword(yytext)) {
         printf("<%s>\n", yytext);
     } else {
@@ -69,15 +82,9 @@ spaces  [ \t\r\f\v]
 }
 
 \n  {
-    linenum++;
     buf[bufIndex] = '\0';  // terminate current line
-    printf("%d: %s\n", linenum, buf);
+    printf("%d: %s\n", linenum++, buf);
     bufIndex = 0;  // reset buffer
-}
-
-\/\/    { 
-    addToBuf(yytext);
-    BEGIN(SINGLE_COMMENT); 
 }
 
 \"  {
@@ -92,7 +99,7 @@ spaces  [ \t\r\f\v]
 
 <SINGLE_COMMENT>\n    {
     buf[bufIndex] = '\0';
-    printf("%d: %s\n", linenum, buf);
+    printf("%d: %s\n", linenum++, buf);
     bufIndex = 0;
     BEGIN(INITIAL);
 }
@@ -101,8 +108,23 @@ spaces  [ \t\r\f\v]
     addToBuf(yytext);
 }
 
+<MUTI_COMMENT>\*\/  {
+    addToBuf(yytext);
+    BEGIN(INITIAL);
+}
+
+<MUTI_COMMENT>.    {
+    addToBuf(yytext);
+}
+
+<MUTI_COMMENT>\n    {
+    addToBuf(yytext);
+    buf[bufIndex] = '\0';
+    printf("%d: %s", linenum++, buf);
+    bufIndex = 0;
+}
+
 <PRINT_STATE>[^\n]+\" {
-    printf("<string:%s>\n", yytext);
     addToBuf(yytext);
     BEGIN(INITIAL);
 }
