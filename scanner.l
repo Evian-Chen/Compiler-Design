@@ -2,15 +2,21 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 
 #define MAX_LINE_LENG 256
+
+#define token(tok)
+#define tokenInteger(tok, v) 
+#define tokenString(tok, s) 
+
+#define TABLE_SIZE 211
 
 int linenum = 1;
 char buf[MAX_LINE_LENG];
 char tempBuf[MAX_LINE_LENG];
 int bufIndex = 0;
 int tempBufIndex = 0;
-
 
 // define all key words
 const char* keywords[] = {
@@ -39,6 +45,82 @@ void addToBuf(const char* str) {
     }
 }
 
+typedef struct SymbolEntry {
+    char* name;
+    int index;
+    struct SymbolEntry* next;
+} SymbolEntry;
+
+typedef struct SymbolTable {
+    SymbolEntry* table[211];
+    int currentIndex;
+} SymbolTable;
+
+SymbolTable* create() {
+    SymbolTable* st = (SymbolTable*)malloc(sizeof(SymbolTable));
+    for (int i = 0; i < TABLE_SIZE; i++) {
+        st->table[i] = NULL;
+    }
+    st->currentIndex = 0;
+    return st;
+}
+
+unsigned int hash(const char* str) {
+    unsigned int h = 0;
+    while (*str) h = (h << 4) + *str++;
+    return h % TABLE_SIZE;
+}
+
+int lookup(SymbolTable* st, const char* name) {
+    unsigned int h = hash(name);
+    SymbolEntry* entry = st->table[h];
+    while (entry != NULL) {
+        if (strcmp(entry->name, name) == 0)
+            return entry->index;
+        entry = entry->next;
+    }
+    return -1; // not found
+}
+
+void dump(SymbolTable* st) {
+    printf("Symbol Table:\n");
+    for (int i = 0; i < TABLE_SIZE; i++) {
+        SymbolEntry* entry = st->table[i];
+        while (entry) {
+            printf("%s\n", entry->name);
+            entry = entry->next;
+        }
+    }
+}
+
+int insert(SymbolTable* st, const char* name) {
+    int existing = lookup(st, name);
+    if (existing != -1)
+        return existing;
+
+    unsigned int h = hash(name);
+    SymbolEntry* newEntry = (SymbolEntry*)malloc(sizeof(SymbolEntry));
+    newEntry->name = strdup(name);  
+    newEntry->index = st->currentIndex++;
+    newEntry->next = st->table[h];
+    st->table[h] = newEntry;
+
+    return newEntry->index;
+}
+
+char* toUpper(const char* str) {
+    static char ans[256];
+    int i = 0;
+    while (str[i] && i < 255) {
+        ans[i] = toupper((char)(str[i]));
+        i++;
+    }
+    ans[i] = '\0';
+    return ans;
+}
+
+SymbolTable* globalTable;
+
 %}
 
 %x  SINGLE_COMMENT
@@ -64,16 +146,29 @@ spaces  [ \t\r\f\v]
 }
 
 {digs}  {
-    printf("i found integer");
+    printf("i found integer ");
+    tokenInteger("integer", atoi(yytext));
     addToBuf(yytext);
 }
 
-{word}{spaces} {
+{word} {
     if (isKeyword(yytext)) {
-        printf("<%s>\n", yytext);
+        token(yytext);
+        printf("<%s>\n", toUpper(yytext));
     } else {
+        int id = insert(globalTable, yytext);
+        tokenString("identifier", yytext);
         printf("<ID: %s>\n", yytext);
     }
+    addToBuf(yytext);
+}
+
+"true" {
+    tokenInteger("integer", 1);
+}
+
+\"[^\n]+\"    {
+    printf("<string:%s>\n", yytext);
     addToBuf(yytext);
 }
 
@@ -132,12 +227,16 @@ spaces  [ \t\r\f\v]
 %%
 
 int main(void) {
+    globalTable = create();
+
     yylex();
 
     if (strlen(buf) > 0) {
         buf[bufIndex] = '\0';  // terminate current line
         printf("%d: %s\n", linenum+1, buf);
     }
+
+    dump(globalTable);
 
     return 0;
 }
