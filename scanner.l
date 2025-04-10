@@ -8,6 +8,7 @@
 
 #define token(tok)
 #define tokenInteger(tok, v) 
+#define tokenReals(tok, v)
 #define tokenString(tok, s) 
 
 #define TABLE_SIZE 211
@@ -131,6 +132,8 @@ digs    [0-9]
 word    [a-zA-Z_][a-zA-Z0-9_]*
 symbol  [^0-9a-zA-Z]
 spaces  [ \t\r\f\v]
+realNum -?digs+.digs+
+integer -?[1-9]+digs*
 
 %%
 
@@ -140,13 +143,18 @@ spaces  [ \t\r\f\v]
 }
 
 \/\* {
-    printf("begin muti comment\n");
     addToBuf(yytext);
     BEGIN(MUTI_COMMENT);
 }
 
-{digs}  {
-    printf("i found integer ");
+{realNum}  {
+    printf("<i found realNum: %s>\n", yytext);
+    tokenReals("realNumber", atoi(yytext));
+    addToBuf(yytext);
+}
+
+{integer}  {
+    printf("<i found integer: %s>\n", yytext);
     tokenInteger("integer", atoi(yytext));
     addToBuf(yytext);
 }
