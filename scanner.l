@@ -6,10 +6,10 @@
 
 #define MAX_LINE_LENG 256
 
-#define token(tok)
-#define tokenInteger(tok, v) 
-#define tokenReals(tok, v)
-#define tokenString(tok, s) 
+#define token(tok)           printf("<%s>\n", tok)
+#define tokenInteger(tok, v) printf("<%s:%d>\n", tok, v)
+#define tokenReals(tok, v)   printf("<%s:%s>\n", tok, v)
+#define tokenString(tok, s)  printf("<%s:%s>\n", tok, s)
 
 #define TABLE_SIZE 211
 
@@ -132,8 +132,6 @@ digs    [0-9]
 word    [a-zA-Z_][a-zA-Z0-9_]*
 symbol  [^0-9a-zA-Z]
 spaces  [ \t\r\f\v]
-realNum -?digs+.digs+
-integer -?[1-9]+digs*
 
 %%
 
@@ -147,13 +145,13 @@ integer -?[1-9]+digs*
     BEGIN(MUTI_COMMENT);
 }
 
-{realNum}  {
-    printf("<i found realNum: %s>\n", yytext);
-    tokenReals("realNumber", atoi(yytext));
+[-+]?[0-9]+\.[0-9]+([eE][-+]?[0-9]+)? {
+    tokenReals("real", yytext);
     addToBuf(yytext);
 }
 
-{integer}  {
+
+[+-]?[1-9]digs+    {
     printf("<i found integer: %s>\n", yytext);
     tokenInteger("integer", atoi(yytext));
     addToBuf(yytext);
@@ -161,11 +159,11 @@ integer -?[1-9]+digs*
 
 {word} {
     if (isKeyword(yytext)) {
-        token(yytext);
+        // token(yytext);
         printf("<%s>\n", toUpper(yytext));
     } else {
         int id = insert(globalTable, yytext);
-        tokenString("identifier", yytext);
+        // tokenString("ID", yytext);
         printf("<ID: %s>\n", yytext);
     }
     addToBuf(yytext);

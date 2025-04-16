@@ -1,0 +1,5 @@
+int a = 123;
+int b = -3.14;
+float c = 1.2e10;
+
+print "a\"\n"
