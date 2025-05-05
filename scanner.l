@@ -1,43 +1,23 @@
 %{
-
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdlib.h>
+#include "y.tab.h"
+#include "symbols.h"
 
 #define MAX_LINE_LENG 256
 
-#define token(tok)           printf("<%s>\n", tok)
-#define tokenInteger(tok, v) printf("<%s:%d>\n", tok, v)
-#define tokenReals(tok, v)   printf("<%s:%s>\n", tok, v)
-#define tokenString(tok, s)  printf("<%s:%s>\n", tok, s)
-
-#define TABLE_SIZE 211
+#define token(s,t) { addToBuf(yytext); return(t); }
+#define tokenInteger(s,v) { yylval.ival = v; addToBuf(yytext); return(INTEGER); }
+#define tokenReals(s,v) { yylval.sval = strdup(v); addToBuf(yytext); return(REAL); }
+#define tokenString(s,v) { yylval.sval = strdup(v); addToBuf(yytext); return(STRING); }
 
 int linenum = 1;
 char buf[MAX_LINE_LENG];
-char tempBuf[MAX_LINE_LENG];
 int bufIndex = 0;
-int tempBufIndex = 0;
+extern SymbolTable* globalTable;
 
-// define all key words
-const char* keywords[] = {
-    "bool", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "extern", "false", "float", "for", "foreach", "if",
-    "int", "print", "println", "read", "return", "string", "switch", "true", "void", "while", NULL
-};
-
-// check if str is a key word
-const int isKeyword(const char* str) {
-    for (int i=0; keywords[i] != NULL; i++) {
-        if (strcmp(str, keywords[i]) == 0) {
-            return 1;
-        }
-    }
-
-    // not a key word
-    return 0;
-}
-
-// add string into buffer
 void addToBuf(const char* str) {
     int len = strlen(str);
     if (bufIndex + len < MAX_LINE_LENG) {
@@ -46,203 +26,92 @@ void addToBuf(const char* str) {
     }
 }
 
-typedef struct SymbolEntry {
-    char* name;
-    int index;
-    struct SymbolEntry* next;
-} SymbolEntry;
-
-typedef struct SymbolTable {
-    SymbolEntry* table[211];
-    int currentIndex;
-} SymbolTable;
-
-SymbolTable* create() {
-    SymbolTable* st = (SymbolTable*)malloc(sizeof(SymbolTable));
-    for (int i = 0; i < TABLE_SIZE; i++) {
-        st->table[i] = NULL;
-    }
-    st->currentIndex = 0;
-    return st;
-}
-
-unsigned int hash(const char* str) {
-    unsigned int h = 0;
-    while (*str) h = (h << 4) + *str++;
-    return h % TABLE_SIZE;
-}
-
-int lookup(SymbolTable* st, const char* name) {
-    unsigned int h = hash(name);
-    SymbolEntry* entry = st->table[h];
-    while (entry != NULL) {
-        if (strcmp(entry->name, name) == 0)
-            return entry->index;
-        entry = entry->next;
-    }
-    return -1; // not found
-}
-
-void dump(SymbolTable* st) {
-    printf("Symbol Table:\n");
-    for (int i = 0; i < TABLE_SIZE; i++) {
-        SymbolEntry* entry = st->table[i];
-        while (entry) {
-            printf("%s\n", entry->name);
-            entry = entry->next;
-        }
-    }
-}
-
-int insert(SymbolTable* st, const char* name) {
-    int existing = lookup(st, name);
-    if (existing != -1)
-        return existing;
-
-    unsigned int h = hash(name);
-    SymbolEntry* newEntry = (SymbolEntry*)malloc(sizeof(SymbolEntry));
-    newEntry->name = strdup(name);  
-    newEntry->index = st->currentIndex++;
-    newEntry->next = st->table[h];
-    st->table[h] = newEntry;
-
-    return newEntry->index;
-}
-
-char* toUpper(const char* str) {
-    static char ans[256];
-    int i = 0;
-    while (str[i] && i < 255) {
-        ans[i] = toupper((char)(str[i]));
-        i++;
-    }
-    ans[i] = '\0';
-    return ans;
-}
-
-SymbolTable* globalTable;
-
 %}
 
-%x  SINGLE_COMMENT
-%x  PRINT_STATE
-%x  MUTI_COMMENT
+%x MUTI_COMMENT
+%option noyywrap
 
-digs    [0-9]
-word    [a-zA-Z_][a-zA-Z0-9_]*
-symbol  [^0-9a-zA-Z]
-spaces  [ \t\r\f\v]
-
-%%
-
-\/\/    { 
-    addToBuf(yytext);
-    BEGIN(SINGLE_COMMENT); 
-}
-
-\/\* {
-    addToBuf(yytext);
-    BEGIN(MUTI_COMMENT);
-}
-
-[-+]?[0-9]+\.[0-9]+([eE][-+]?[0-9]+)? {
-    tokenReals("real", yytext);
-    addToBuf(yytext);
-}
-
-
-[+-]?[1-9]digs+    {
-    printf("<i found integer: %s>\n", yytext);
-    tokenInteger("integer", atoi(yytext));
-    addToBuf(yytext);
-}
-
-{word} {
-    if (isKeyword(yytext)) {
-        // token(yytext);
-        printf("<%s>\n", toUpper(yytext));
-    } else {
-        int id = insert(globalTable, yytext);
-        // tokenString("ID", yytext);
-        printf("<ID: %s>\n", yytext);
-    }
-    addToBuf(yytext);
-}
-
-"true" {
-    tokenInteger("integer", 1);
-}
-
-\"[^\n]+\"    {
-    printf("<string:%s>\n", yytext);
-    addToBuf(yytext);
-}
-
-{spaces}    {
-    addToBuf(yytext);
-}
-
-\n  {
-    buf[bufIndex] = '\0';  // terminate current line
-    printf("%d: %s\n", linenum++, buf);
-    bufIndex = 0;  // reset buffer
-}
-
-\"  {
-    addToBuf(yytext);
-    BEGIN(PRINT_STATE);
-}
-
-{symbol}    {
-    printf("<'%s'>\n", yytext);
-    addToBuf(yytext);
-}
-
-<SINGLE_COMMENT>\n    {
-    buf[bufIndex] = '\0';
-    printf("%d: %s\n", linenum++, buf);
-    bufIndex = 0;
-    BEGIN(INITIAL);
-}
-
-<SINGLE_COMMENT>[^\n]+  {
-    addToBuf(yytext);
-}
-
-<MUTI_COMMENT>\*\/  {
-    addToBuf(yytext);
-    BEGIN(INITIAL);
-}
-
-<MUTI_COMMENT>.    {
-    addToBuf(yytext);
-}
-
-<MUTI_COMMENT>\n    {
-    addToBuf(yytext);
-    buf[bufIndex] = '\0';
-    printf("%d: %s", linenum++, buf);
-    bufIndex = 0;
-}
-
-<PRINT_STATE>[^\n]+\" {
-    addToBuf(yytext);
-    BEGIN(INITIAL);
-}
+id      [a-zA-Z_][a-zA-Z0-9_]*
+digs    [0-9]+
+real    [0-9]+\.[0-9]+([eE][-+]?[0-9]+)?
+ws      [ \t\r\f\v]+
 
 %%
 
-int main(void) {
-    globalTable = create();
+"//".*                  { /* skip single-line comment */ }
 
-    yylex();
+"/*"                      { BEGIN(MUTI_COMMENT); }
+<MUTI_COMMENT>"*/"        { BEGIN(INITIAL); }
+<MUTI_COMMENT>\n          { linenum++; }
+<MUTI_COMMENT>.           { /* skip character */ }
 
-    if (strlen(buf) > 0) {
-        buf[bufIndex] = '\0';  // terminate current line
-        printf("%d: %s\n", linenum+1, buf);
+
+{ws}                    { /* skip whitespace */ }
+
+{real}                  { tokenReals("REAL", yytext); }
+{digs}                  { tokenInteger("INTEGER", atoi(yytext)); }
+
+"true"                  { tokenInteger("INTEGER", 1); }
+"false"                 { tokenInteger("INTEGER", 0); }
+
+\"([^\\\"\n]|\\.)*\"  { tokenString("STRING", yytext); }
+
+"++"                    { token("++", INC); }
+"--"                    { token("--", DEC); }
+"=="                    { token("==", EQ); }
+"!="                    { token("!=", NEQ); }
+"<="                    { token("<=", LE); }
+">="                    { token(">=", GE); }
+"&&"                    { token("&&", AND); }
+"||"                    { token("||", OR); }
+"="                     { token("=", ASSIGN); }
+"<"                     { token("<", LT); }
+">"                     { token(">", GT); }
+"!"                     { token("!", NOT); }
+"+"                     { token("+", PLUS); }
+"-"                     { token("-", MINUS); }
+"*"                     { token("*", MUL); }
+"/"                     { token("/", DIV); }
+"%"                     { token("%", MOD); }
+".."                    { token("..", DOTDOT); }     
+
+";"                     { token(";", SEMICOLON); }
+","                     { token(",", COMMA); }
+":"                     { token(":", COLON); }
+"("                     { token("(", LPAREN); }
+")"                     { token(")", RPAREN); }
+"{"                     { token("{", LBRACE); }
+"}"                     { token("}", RBRACE); }
+"["                     { token("[", LBRACKET); }
+"]"                     { token("]", RBRACKET); }
+
+{id} {
+    if (strcmp(yytext, "if") == 0) return(IF);
+    else if (strcmp(yytext, "else") == 0) return(ELSE);
+    else if (strcmp(yytext, "while") == 0) return(WHILE);
+    else if (strcmp(yytext, "for") == 0) return(FOR);
+    else if (strcmp(yytext, "foreach") == 0) return(FOREACH);
+    else if (strcmp(yytext, "return") == 0) return(RETURN);
+    else if (strcmp(yytext, "read") == 0) return(READ);
+    else if (strcmp(yytext, "print") == 0) return(PRINT);
+    else if (strcmp(yytext, "println") == 0) return(PRINTLN);
+    else if (strcmp(yytext, "const") == 0) return(CONST);
+    else if (strcmp(yytext, "void") == 0) return(VOID);
+    else if (strcmp(yytext, "int") == 0) return(INT);
+    else if (strcmp(yytext, "bool") == 0) return(BOOL);
+    else if (strcmp(yytext, "string") == 0) return(STRING_TYPE);
+    else if (strcmp(yytext, "float") == 0) return(FLOAT);
+    else if (strcmp(yytext, "main") == 0) return(ID);  
+    else {
+        yylval.sval = strdup(yytext);
+        insert(globalTable, yytext);
+        return(ID);
     }
-
-    dump(globalTable);
-
-    return 0;
 }
+
+.       { printf("Unknown token: %s\n", yytext); }
+\n    { linenum++; }
+
+
+%%
+
